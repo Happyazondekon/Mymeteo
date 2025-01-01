@@ -1,5 +1,4 @@
-# exoflutter
-
+# Mymétéo
 A weather application built using Flutter, allowing users to search for current weather information by city or automatically detect the weather of their current location.
 
 ## Features

@@ -1,5 +1,5 @@
 import 'package:exoflutter/services/weather_service.dart';
-import 'package:exoflutter/models/weather_model.dart'; // Ensure this is the correct path
+import 'package:exoflutter/models/weather_model.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
@@ -68,18 +68,9 @@ class _WeatherPageState extends State<WeatherPage> {
       setState(() {
         _isLoading = false;
       });
-
-      try {
-        final weather = await _weatherService.getWeather(cityName);
-        print('Données météo : $weather');
-      } catch (e) {
-        print('Erreur lors de l\'appel API : $e');
-      }
-
     }
   }
 
-  // Weather animation logic
   String getWeatherAnimation(String? mainCondition) {
     if (mainCondition == null) return 'assets/sunny.json';
 
@@ -107,122 +98,264 @@ class _WeatherPageState extends State<WeatherPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.lightBlue,
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 40),
-            // Search bar
-            Row(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.blue.shade800,
+              Colors.blue.shade500,
+              Colors.lightBlue.shade300,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _cityController,
-                    decoration: InputDecoration(
-                      hintText: 'Entrez le nom de la ville',
-                      hintStyle: const TextStyle(color: Colors.white54),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
+                // Barre de recherche avec effet verre
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    color: Colors.white.withOpacity(0.1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.1),
+                        blurRadius: 10,
+                        spreadRadius: 1,
                       ),
-                      filled: true,
-                      fillColor: Colors.white24,
-                    ),
-                    style: const TextStyle(color: Colors.white),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _cityController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Rechercher une ville...',
+                            hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                            prefixIcon: const Icon(Icons.search, color: Colors.white),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        child: IconButton(
+                          onPressed: () {
+                            final cityName = _cityController.text;
+                            if (cityName.isNotEmpty) _fetchWeather(cityName);
+                          },
+                          icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: () {
-                    final cityName = _cityController.text;
-                    if (cityName.isNotEmpty) {
-                      _fetchWeather(cityName);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white24,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Rechercher'),
+
+                Expanded(
+                  child: _isLoading
+                      ? const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  )
+                      : _error != null
+                      ? _buildErrorWidget()
+                      : _weather == null
+                      ? _buildNoDataWidget()
+                      : _buildWeatherInfo(),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+          ),
+        ),
+      ),
+    );
+  }
 
-            // Weather display
-            Expanded(
-              child: Center(
-                child: _isLoading
-                    ? const CircularProgressIndicator()
-                    : _error != null
-                    ? Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _error!,
-                      style: const TextStyle(color: Colors.white),
-                      textAlign: TextAlign.center,
+  Widget _buildWeatherInfo() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Carte principale avec effet verre
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(25),
+            color: Colors.white.withOpacity(0.1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withOpacity(0.1),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.location_on, color: Colors.white, size: 24),
+                  const SizedBox(width: 8),
+                  Text(
+                    _weather!.cityName,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
-                    ElevatedButton(
-                      onPressed: () {
-                        final cityName = _cityController.text;
-                        if (cityName.isNotEmpty) {
-                          _fetchWeather(cityName);
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white24,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Réessayer'),
-                    ),
-                  ],
-                )
-                    : _weather == null
-                    ? const Text('Aucune donnée météo disponible', style: TextStyle(color: Colors.white))
-                    : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.location_on, // Location icon
-                      color: Colors.white, // Customize color
-                      size: 50, // Customize size
-                    ),
-                    const SizedBox(width: 8),
-                    Align(
-                      alignment: Alignment.topCenter,
-                      child: Text(
-                        _weather!.cityName,
-                        style: const TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.amber),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-
-                    // Animation
-                    Lottie.asset(getWeatherAnimation(
-                        _weather?.mainCondition)),
-
-                    Text(
-                      '${_weather!.temperature.round()}°C',
-                      style: const TextStyle(
-                          fontSize: 32, color: Colors.white),
-                    ),
-
-                    // Weather condition
-                    Text(
-                      _weather?.mainCondition ?? "",
-                      style: const TextStyle(
-                          fontSize: 32, color: Colors.white),
-                    )
-                  ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 200,
+                child: Lottie.asset(
+                  getWeatherAnimation(_weather?.mainCondition),
+                  fit: BoxFit.contain,
                 ),
               ),
+              const SizedBox(height: 20),
+              Text(
+                '${_weather!.temperature.round()}°',
+                style: const TextStyle(
+                  fontSize: 72,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                _weather?.mainCondition ?? "",
+                style: TextStyle(
+                  fontSize: 24,
+                  color: Colors.white.withOpacity(0.9),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Informations supplémentaires
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildInfoCard(
+              icon: Icons.water_drop,
+              title: "Humidité",
+              value: "65%",
+            ),
+            _buildInfoCard(
+              icon: Icons.air,
+              title: "Vent",
+              value: "10 km/h",
+            ),
+            _buildInfoCard(
+              icon: Icons.visibility,
+              title: "Visibilité",
+              value: "10 km",
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildInfoCard({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        color: Colors.white.withOpacity(0.1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.white.withOpacity(0.1),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.8),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          color: Colors.white.withOpacity(0.1),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.white,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _error!,
+              style: const TextStyle(color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                final cityName = _cityController.text;
+                if (cityName.isNotEmpty) {
+                  _fetchWeather(cityName);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white.withOpacity(0.2),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Réessayer'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoDataWidget() {
+    return const Center(
+      child: Text(
+        'Aucune donnée météo disponible',
+        style: TextStyle(color: Colors.white),
       ),
     );
   }

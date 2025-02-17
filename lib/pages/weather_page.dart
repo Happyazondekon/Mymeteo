@@ -1,8 +1,84 @@
-import 'package:exoflutter/services/weather_service.dart';
-import 'package:exoflutter/models/weather_model.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
+// Weather Model
+class Weather {
+  final String cityName;
+  final double temperature;
+  final String mainCondition;
+  final double humidity;
+  final double windSpeed;
+  final double visibility;
+
+  Weather({
+    required this.cityName,
+    required this.temperature,
+    required this.mainCondition,
+    required this.humidity,
+    required this.windSpeed,
+    required this.visibility,
+  });
+
+  factory Weather.fromJson(Map<String, dynamic> json) {
+    return Weather(
+      cityName: json['name'],
+      temperature: json['main']['temp'].toDouble(),
+      mainCondition: json['weather'][0]['main'],
+      humidity: json['main']['humidity'].toDouble(),
+      windSpeed: json['wind']['speed'].toDouble(),
+      visibility: (json['visibility'] / 1000).toDouble(), // Conversion en km
+    );
+  }
+}
+
+// Weather Service
+class WeatherService {
+  static const BASE_URL = 'http://api.openweathermap.org/data/2.5/weather';
+  final String apiKey;
+
+  WeatherService(this.apiKey);
+
+  Future<Weather> getWeather(String cityName) async {
+    final response = await http.get(
+      Uri.parse('$BASE_URL?q=$cityName&appid=$apiKey&units=metric'),
+    );
+
+    if (response.statusCode == 200) {
+      return Weather.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to load weather data');
+    }
+  }
+
+  Future<String> getCurrentCity() async {
+    // Get permission from the user
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    // Fetch the current location
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    // Convert the location into a list of placemark objects
+    List<Placemark> placemarks = await placemarkFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+
+    // Extract the city name from the first placemark
+    String? city = placemarks[0].locality;
+    return city ?? "Unknown location";
+  }
+}
+
+// Main Weather Page
 class WeatherPage extends StatefulWidget {
   const WeatherPage({super.key});
 
@@ -20,6 +96,10 @@ class _WeatherPageState extends State<WeatherPage> {
   @override
   void initState() {
     super.initState();
+    _loadWeather();
+  }
+
+  Future<void> _loadWeather() async {
     _fetchDefaultWeather();
   }
 
@@ -30,21 +110,15 @@ class _WeatherPageState extends State<WeatherPage> {
     });
 
     try {
-      // Get the current city automatically
       String cityName = await _weatherService.getCurrentCity();
       final weather = await _weatherService.getWeather(cityName);
-
-      setState(() {
-        _weather = weather;
-      });
+      setState(() => _weather = weather);
     } catch (e) {
       setState(() {
-        _error = 'Oups! Impossible de trouver votre localisation actuelle. Vous pouvez rechercher d\'autres villes.';
+        _error = 'Impossible de trouver votre localisation? Recherchez votre ville ou une autre ville.';
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
@@ -56,22 +130,17 @@ class _WeatherPageState extends State<WeatherPage> {
 
     try {
       final weather = await _weatherService.getWeather(cityName);
-
-      setState(() {
-        _weather = weather;
-      });
+      setState(() => _weather = weather);
     } catch (e) {
       setState(() {
-        _error = 'Oups! Impossible de trouver la ville "$cityName". Vous pouvez rechercher d\'autres villes.';
+        _error = 'Impossible de trouver la ville "$cityName"';
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
-  String getWeatherAnimation(String? mainCondition) {
+  String _getWeatherAnimation(String? mainCondition) {
     if (mainCondition == null) return 'assets/sunny.json';
 
     switch (mainCondition.toLowerCase()) {
@@ -104,72 +173,55 @@ class _WeatherPageState extends State<WeatherPage> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.blue.shade800,
+              Colors.blue.shade900,
               Colors.blue.shade500,
-              Colors.lightBlue.shade300,
+              Colors.blue.shade300,
             ],
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Column(
-              children: [
-                // Barre de recherche avec effet verre
-                Container(
+          child: Column(
+            children: [
+              // Search Bar
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Container(
                   decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(15),
-                    color: Colors.white.withOpacity(0.1),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.white.withOpacity(0.1),
-                        blurRadius: 10,
-                        spreadRadius: 1,
-                      ),
-                    ],
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _cityController,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: 'Rechercher une ville...',
-                            hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                            prefixIcon: const Icon(Icons.search, color: Colors.white),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        child: IconButton(
-                          onPressed: () {
-                            final cityName = _cityController.text;
-                            if (cityName.isNotEmpty) _fetchWeather(cityName);
-                          },
-                          icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
-                        ),
-                      ),
-                    ],
+                  child: TextField(
+                    controller: _cityController,
+                    style: const TextStyle(color: Colors.white),
+                    onSubmitted: (value) {
+                      if (value.isNotEmpty) _fetchWeather(value);
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Rechercher une ville...',
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                      prefixIcon: const Icon(Icons.search, color: Colors.white),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.all(16),
+                    ),
                   ),
                 ),
+              ),
 
-                Expanded(
-                  child: _isLoading
-                      ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  )
-                      : _error != null
-                      ? _buildErrorWidget()
-                      : _weather == null
-                      ? _buildNoDataWidget()
-                      : _buildWeatherInfo(),
+              // Main Content
+              Expanded(
+                child: _isLoading
+                    ? const Center(
+                    child: CircularProgressIndicator(color: Colors.white))
+                    : _error != null
+                    ? _buildErrorWidget()
+                    : _weather == null
+                    ? _buildNoDataWidget()
+                    : SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: _buildWeatherInfo(),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -177,92 +229,90 @@ class _WeatherPageState extends State<WeatherPage> {
   }
 
   Widget _buildWeatherInfo() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // Carte principale avec effet verre
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(25),
-            color: Colors.white.withOpacity(0.1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.white.withOpacity(0.1),
-                blurRadius: 10,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: Column(
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Location
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.location_on, color: Colors.white, size: 24),
-                  const SizedBox(width: 8),
-                  Text(
-                    _weather!.cityName,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+              const Icon(Icons.location_on, color: Colors.white),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  _weather!.cityName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
                   ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 200,
-                child: Lottie.asset(
-                  getWeatherAnimation(_weather?.mainCondition),
-                  fit: BoxFit.contain,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                '${_weather!.temperature.round()}°',
-                style: const TextStyle(
-                  fontSize: 72,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              Text(
-                _weather?.mainCondition ?? "",
-                style: TextStyle(
-                  fontSize: 24,
-                  color: Colors.white.withOpacity(0.9),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-        ),
 
-        const SizedBox(height: 20),
+          // Animation
+          SizedBox(
+            height: 200,
+            child: Lottie.asset(
+              _getWeatherAnimation(_weather?.mainCondition),
+              fit: BoxFit.contain,
+            ),
+          ),
 
-        // Informations supplémentaires
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildInfoCard(
-              icon: Icons.water_drop,
-              title: "Humidité",
-              value: "65%",
+          // Temperature
+          Text(
+            '${_weather!.temperature.round()}°C',
+            style: const TextStyle(
+              fontSize: 64,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
             ),
-            _buildInfoCard(
-              icon: Icons.air,
-              title: "Vent",
-              value: "10 km/h",
+          ),
+
+          // Condition
+          Text(
+            _weather!.mainCondition,
+            style: const TextStyle(
+              fontSize: 20,
+              color: Colors.white70,
             ),
-            _buildInfoCard(
-              icon: Icons.visibility,
-              title: "Visibilité",
-              value: "10 km",
+          ),
+
+          const SizedBox(height: 20),
+
+          // Additional Info Cards
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildInfoCard(
+                  icon: Icons.water_drop,
+                  title: 'Humidité',
+                  value: '${_weather!.humidity.round()}%',
+                ),
+                const SizedBox(width: 12),
+                _buildInfoCard(
+                  icon: Icons.air,
+                  title: 'Vent',
+                  value: '${_weather!.windSpeed.round()} km/h',
+                ),
+                const SizedBox(width: 12),
+                _buildInfoCard(
+                  icon: Icons.visibility,
+                  title: 'Visibilité',
+                  value: '${_weather!.visibility.round()} km',
+                ),
+              ],
             ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -272,27 +322,20 @@ class _WeatherPageState extends State<WeatherPage> {
     required String value,
   }) {
     return Container(
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(15),
-        color: Colors.white.withOpacity(0.1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.white.withOpacity(0.1),
-            blurRadius: 10,
-            spreadRadius: 1,
-          ),
-        ],
       ),
       child: Column(
         children: [
-          Icon(icon, color: Colors.white, size: 24),
+          Icon(icon, color: Colors.white, size: 28),
           const SizedBox(height: 8),
           Text(
             title,
             style: TextStyle(
               color: Colors.white.withOpacity(0.8),
-              fontSize: 12,
+              fontSize: 14,
             ),
           ),
           const SizedBox(height: 4),
@@ -311,14 +354,10 @@ class _WeatherPageState extends State<WeatherPage> {
 
   Widget _buildErrorWidget() {
     return Center(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          color: Colors.white.withOpacity(0.1),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(
               Icons.error_outline,
@@ -333,12 +372,7 @@ class _WeatherPageState extends State<WeatherPage> {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () {
-                final cityName = _cityController.text;
-                if (cityName.isNotEmpty) {
-                  _fetchWeather(cityName);
-                }
-              },
+              onPressed: _fetchDefaultWeather,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white.withOpacity(0.2),
                 foregroundColor: Colors.white,
@@ -358,5 +392,11 @@ class _WeatherPageState extends State<WeatherPage> {
         style: TextStyle(color: Colors.white),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _cityController.dispose();
+    super.dispose();
   }
 }

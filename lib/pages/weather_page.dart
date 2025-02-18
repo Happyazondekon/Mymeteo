@@ -265,7 +265,9 @@ class _WeatherPageState extends State<WeatherPage> {
 
     switch (mainCondition.toLowerCase()) {
       case 'clouds':
+        return 'assets/cloud.json';
       case 'mist':
+      return 'assets/mist.json';
       case 'smoke':
       case 'haze':
       case 'dust':
@@ -316,7 +318,7 @@ class _WeatherPageState extends State<WeatherPage> {
 
             // Animation
             SizedBox(
-              height: 150, // Réduit la hauteur de l'animation
+              height: 160, // Réduit la hauteur de l'animation
               child: Lottie.asset(
                 _getWeatherAnimation(_weather?.mainCondition),
                 fit: BoxFit.contain,

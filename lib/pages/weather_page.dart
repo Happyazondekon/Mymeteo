@@ -53,6 +53,18 @@ class WeatherService {
       throw Exception('Failed to load weather data');
     }
   }
+  Future<List<String>> getCitySuggestions(String query) async {
+    final response = await http.get(
+      Uri.parse('http://api.openweathermap.org/geo/1.0/direct?q=$query&limit=5&appid=$apiKey'),
+    );
+
+    if (response.statusCode == 200) {
+      List<dynamic> data = jsonDecode(response.body);
+      return data.map((city) => city['name'].toString()).toList();
+    } else {
+      throw Exception('Failed to load city suggestions');
+    }
+  }
 
   Future<String> getCurrentCity() async {
     // Get permission from the user
@@ -91,7 +103,6 @@ class _WeatherPageState extends State<WeatherPage> {
   Weather? _weather;
   bool _isLoading = false;
   String? _error;
-  final TextEditingController _cityController = TextEditingController();
 
   @override
   void initState() {
@@ -140,30 +151,6 @@ class _WeatherPageState extends State<WeatherPage> {
     }
   }
 
-  String _getWeatherAnimation(String? mainCondition) {
-    if (mainCondition == null) return 'assets/sunny.json';
-
-    switch (mainCondition.toLowerCase()) {
-      case 'clouds':
-      case 'mist':
-      case 'smoke':
-      case 'haze':
-      case 'dust':
-      case 'fog':
-        return 'assets/cloud.json';
-      case 'rain':
-      case 'drizzle':
-      case 'shower rain':
-        return 'assets/rainy.json';
-      case 'thunderstorm':
-        return 'assets/thunder.json';
-      case 'clear':
-        return 'assets/sunny.json';
-      default:
-        return 'assets/sunny.json';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -190,19 +177,62 @@ class _WeatherPageState extends State<WeatherPage> {
                     color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(15),
                   ),
-                  child: TextField(
-                    controller: _cityController,
-                    style: const TextStyle(color: Colors.white),
-                    onSubmitted: (value) {
-                      if (value.isNotEmpty) _fetchWeather(value);
+                  child: Autocomplete<String>(
+                    optionsBuilder: (TextEditingValue textEditingValue) async {
+                      if (textEditingValue.text.isEmpty) {
+                        return const Iterable<String>.empty();
+                      }
+                      return await _weatherService.getCitySuggestions(textEditingValue.text);
                     },
-                    decoration: InputDecoration(
-                      hintText: 'Rechercher une ville...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                      prefixIcon: const Icon(Icons.search, color: Colors.white),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.all(16),
-                    ),
+                    onSelected: (String selection) {
+                      _fetchWeather(selection);
+                    },
+                    fieldViewBuilder: (BuildContext context, TextEditingController textEditingController, FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                      return TextField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Rechercher une ville...',
+                          hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                          prefixIcon: const Icon(Icons.search, color: Colors.white),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.all(16),
+                        ),
+                      );
+                    },
+                    optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<String> onSelected, Iterable<String> options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4.0,
+                          child: Container(
+                            width: MediaQuery.of(context).size.width * 0.8, // Largeur de la liste déroulante
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade900.withOpacity(0.9), // Couleur de fond de la liste
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final String option = options.elementAt(index);
+                                return ListTile(
+                                  title: Text(
+                                    option,
+                                    style: const TextStyle(color: Colors.white), // Couleur du texte des suggestions
+                                  ),
+                                  onTap: () {
+                                    onSelected(option);
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -211,15 +241,13 @@ class _WeatherPageState extends State<WeatherPage> {
               Expanded(
                 child: _isLoading
                     ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white))
+                  child: CircularProgressIndicator(color: Colors.white),
+                )
                     : _error != null
                     ? _buildErrorWidget()
                     : _weather == null
                     ? _buildNoDataWidget()
-                    : SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  child: _buildWeatherInfo(),
-                ),
+                    : _buildWeatherInfo(),
               ),
             ],
           ),
@@ -228,67 +256,98 @@ class _WeatherPageState extends State<WeatherPage> {
     );
   }
 
+
+  String _getWeatherAnimation(String? mainCondition) {
+    if (mainCondition == null) return 'assets/sunny.json';
+
+    switch (mainCondition.toLowerCase()) {
+      case 'clouds':
+      case 'mist':
+      case 'smoke':
+      case 'haze':
+      case 'dust':
+      case 'fog':
+        return 'assets/cloud.json';
+      case 'rain':
+      case 'drizzle':
+      case 'shower rain':
+        return 'assets/rainy.json';
+      case 'thunderstorm':
+        return 'assets/thunder.json';
+      case 'clear':
+        return 'assets/sunny.json';
+      default:
+        return 'assets/sunny.json';
+    }
+  }
+
+
+
   Widget _buildWeatherInfo() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Location
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.location_on, color: Colors.white),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  _weather!.cityName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Location
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.location_on, color: Colors.white),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _weather!.cityName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
+              ],
+            ),
+
+            // Animation
+            SizedBox(
+              height: 150, // Réduit la hauteur de l'animation
+              child: Lottie.asset(
+                _getWeatherAnimation(_weather?.mainCondition),
+                fit: BoxFit.contain,
               ),
-            ],
-          ),
-
-          // Animation
-          SizedBox(
-            height: 200,
-            child: Lottie.asset(
-              _getWeatherAnimation(_weather?.mainCondition),
-              fit: BoxFit.contain,
             ),
-          ),
 
-          // Temperature
-          Text(
-            '${_weather!.temperature.round()}°C',
-            style: const TextStyle(
-              fontSize: 64,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+            // Temperature
+            Text(
+              '${_weather!.temperature.round()}°C',
+              style: const TextStyle(
+                fontSize: 64,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
-          ),
 
-          // Condition
-          Text(
-            _weather!.mainCondition,
-            style: const TextStyle(
-              fontSize: 20,
-              color: Colors.white70,
+            // Condition
+            Text(
+              _weather!.mainCondition,
+              style: const TextStyle(
+                fontSize: 20,
+                color: Colors.white70,
+              ),
             ),
-          ),
 
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          // Additional Info Cards
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
+            // Recommendations
+            _buildRecommendations(),
+
+            const SizedBox(height: 20),
+
+            // Additional Info Cards
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _buildInfoCard(
@@ -296,17 +355,110 @@ class _WeatherPageState extends State<WeatherPage> {
                   title: 'Humidité',
                   value: '${_weather!.humidity.round()}%',
                 ),
-                const SizedBox(width: 12),
                 _buildInfoCard(
                   icon: Icons.air,
                   title: 'Vent',
                   value: '${_weather!.windSpeed.round()} km/h',
                 ),
-                const SizedBox(width: 12),
                 _buildInfoCard(
                   icon: Icons.visibility,
                   title: 'Visibilité',
                   value: '${_weather!.visibility.round()} km',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecommendations() {
+    String temperatureRecommendation = '';
+    String activityRecommendation = '';
+    String healthRecommendation = '';
+
+    if (_weather!.temperature < 10) {
+      temperatureRecommendation = 'Portez un manteau, une écharpe et des gants.';
+      activityRecommendation = 'Profitez d\'une boisson chaude à l\'intérieur.';
+      healthRecommendation = 'Évitez de rester trop longtemps dehors.';
+    } else if (_weather!.temperature >= 10 && _weather!.temperature < 20) {
+      temperatureRecommendation = 'Un pull ou une veste légère suffira.';
+      activityRecommendation = 'Idéal pour une balade en ville.';
+      healthRecommendation = 'Hydratez-vous régulièrement.';
+    } else {
+      temperatureRecommendation = 'Optez pour des vêtements légers et un chapeau.';
+      activityRecommendation = 'Parfait pour une sortie en plein air.';
+      healthRecommendation = 'N\'oubliez pas la crème solaire.';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Recommandations',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 10),
+        _buildRecommendationCard(
+          icon: Icons.shopping_bag,
+          title: 'Vêtements',
+          description: temperatureRecommendation,
+        ),
+        const SizedBox(height: 10),
+        _buildRecommendationCard(
+          icon: Icons.directions_walk,
+          title: 'Activités',
+          description: activityRecommendation,
+        ),
+        const SizedBox(height: 10),
+        _buildRecommendationCard(
+          icon: Icons.health_and_safety,
+          title: 'Santé',
+          description: healthRecommendation,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecommendationCard({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 28),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),
@@ -396,7 +548,6 @@ class _WeatherPageState extends State<WeatherPage> {
 
   @override
   void dispose() {
-    _cityController.dispose();
     super.dispose();
   }
 }

@@ -185,7 +185,7 @@ class _WeatherPageState extends State<WeatherPage> {
                       return await _weatherService.getCitySuggestions(textEditingValue.text);
                     },
                     onSelected: (String selection) {
-                      _fetchWeather(selection);
+                      _fetchWeather(selection); // Lorsqu'une suggestion est sélectionnée
                     },
                     fieldViewBuilder: (BuildContext context, TextEditingController textEditingController, FocusNode focusNode, VoidCallback onFieldSubmitted) {
                       return TextField(
@@ -199,6 +199,9 @@ class _WeatherPageState extends State<WeatherPage> {
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.all(16),
                         ),
+                        onSubmitted: (String value) {
+                          _fetchWeather(value); // Lorsque l'utilisateur appuie sur "Entrée"
+                        },
                       );
                     },
                     optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<String> onSelected, Iterable<String> options) {
@@ -224,7 +227,7 @@ class _WeatherPageState extends State<WeatherPage> {
                                     style: const TextStyle(color: Colors.white), // Couleur du texte des suggestions
                                   ),
                                   onTap: () {
-                                    onSelected(option);
+                                    onSelected(option); // Sélectionne la suggestion
                                   },
                                 );
                               },
